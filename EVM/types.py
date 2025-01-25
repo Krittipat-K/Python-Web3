@@ -54,3 +54,24 @@ class TxParamsInput(NamedTuple):
     to:ChecksumAddress|None = None
     type:Union[int, HexStr]|None = None
     value:Wei|None = None
+    
+class BaseEventData(NamedTuple):
+    address: ChecksumAddress
+    block_hash: HexBytes
+    block_number: int
+    event: str
+    log_index: int
+    transaction_hash: HexBytes
+    transaction_index: int
+    
+class ERC20TransferArgs(NamedTuple):
+    from_address: ChecksumAddress
+    to_address: ChecksumAddress
+    value: int
+    
+class ERC20TransferEventData(BaseEventData):
+    def __new__(cls, address: ChecksumAddress, block_hash: HexBytes, block_number: int, log_index: int, transaction_hash: HexBytes, transaction_index: int, args: ERC20TransferArgs) -> 'ERC20TransferEventData':
+        return super().__new__(cls, address, block_hash, block_number, "Transfer", log_index, transaction_hash, transaction_index)
+    
+    def __init__(self, address: ChecksumAddress, block_hash: HexBytes, block_number: int, log_index: int, transaction_hash: HexBytes, transaction_index: int, args:ERC20TransferArgs) -> None:
+        self.args = args

@@ -15,11 +15,17 @@ from eth_typing import (
 )
 from web3.contract.async_contract import (
     AsyncContract,
+    AsyncContractEvent
 )
 from web3.types import (
+    EventData,
+    TxReceipt,
     TxParams,
     Wei,
     Nonce,
+)
+from web3._utils.events import (
+    EventLogErrorFlags,
 )
 from eth_account.datastructures import (
     SignedTransaction,
@@ -32,7 +38,8 @@ from EVM.types import (
     TokenDetail,
     ChainDetail,
     RPCDetail,
-    TxParamsInput
+    TxParamsInput,
+    BaseEventData
 )
 
 
@@ -120,9 +127,33 @@ class AsyncWeb3HTTP:
     def load_contract(self,abi:Any,address:ChecksumAddress) -> AsyncContract:
         return self.w3.eth.contract(abi=abi,address=address)
     
+    async def async_get_event_data_with_txn(self,
+                                 txn:HexBytes,
+                                 event:AsyncContractEvent,
+                                 error:EventLogErrorFlags=EventLogErrorFlags.Discard)->tuple[EventData]:
+        receipt:TxReceipt =  await self.w3.eth.get_transaction_receipt(txn)
+        return event.process_receipt(receipt,errors=error)
+    
+    async def async_get_event_data_with_block(self,
+                                    block:BlockIdentifier,
+                                    event:AsyncContractEvent,
+                                    error:EventLogErrorFlags=EventLogErrorFlags.Discard)->tuple[EventData]:
+            return await event.get_logs(block,errors=error)
+    
     async def async_get_balance_with_label(self,address:ChecksumAddress,block_identifier:BlockIdentifier='latest') -> tuple[ChecksumAddress,int]:
         balance = await self.w3.eth.get_balance(address,block_identifier)
         return address,balance
+    
+    def process_event_data(self, event_data:EventData) -> tuple[BaseEventData, dict[str, Any]]:
+        address: ChecksumAddress = Web3.to_checksum_address(event_data['address'])
+        blockHash: HexBytes = HexBytes(event_data['blockHash'])
+        blockNumber: int = int(event_data['blockNumber'])
+        logIndex: int = int(event_data['logIndex'])
+        transactionHash: HexBytes = HexBytes(event_data['transactionHash'])
+        transactionIndex: int = int(event_data['transactionIndex'])
+        event_name = event_data['event']
+        args = event_data['args']
+        return BaseEventData(address,blockHash,blockNumber,event_name,logIndex,transactionHash,transactionIndex),args 
     
 class AsyncWeb3HTTPWallet(AsyncWeb3HTTP):
     
