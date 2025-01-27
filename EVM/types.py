@@ -75,3 +75,88 @@ class ERC20TransferEventData(BaseEventData):
     
     def __init__(self, address: ChecksumAddress, block_hash: HexBytes, block_number: int, log_index: int, transaction_hash: HexBytes, transaction_index: int, args:ERC20TransferArgs) -> None:
         self.args = args
+        
+        
+class UniswapV2GetReservesRespond(NamedTuple):
+    reserve0: int
+    reserve1: int
+    ts: int
+    
+class UniswapV2ReservesReport(NamedTuple):
+    underlying_reserve: int
+    collateral_reserve: int
+    ts: int
+    
+class UniswapV2SwapReport(NamedTuple):
+    sender:ChecksumAddress
+    to:ChecksumAddress
+    action:str
+    underlying_amount: int
+    collateral_amount: int
+    transaction_hash: HexBytes
+    log_index: int
+    block_number: int
+    transaction_index: int
+    
+class UniswapV2SwapArgs(NamedTuple):
+    sender:ChecksumAddress
+    to:ChecksumAddress
+    amount_0_in:int
+    amount_1_in:int
+    amount_0_out:int
+    amount_1_out:int
+    
+class UniswapV2SwapEventData(BaseEventData):
+    def __new__(cls, address: ChecksumAddress, block_hash: HexBytes, block_number: int, log_index: int, transaction_hash: HexBytes, transaction_index: int, args: UniswapV2SwapArgs) -> 'UniswapV2SwapEventData':
+        return super().__new__(cls, address, block_hash, block_number, "Swap", log_index, transaction_hash, transaction_index)
+    
+    def __init__(self, address: ChecksumAddress, block_hash: HexBytes, block_number: int, log_index: int, transaction_hash: HexBytes, transaction_index: int, args:UniswapV2SwapArgs) -> None:
+        self.args = args
+        
+class UniswapV3Slot0Respond(NamedTuple):
+    sqrt_price_x96: int
+    tick: int
+    observation_index: int
+    observation_cardinality: int
+    observation_cardinality_next: int
+    fee_protocol: int
+    unlocked: bool
+    
+class UniswapV3SwapArgs(NamedTuple):
+    sender: ChecksumAddress
+    recipient: ChecksumAddress
+    amount_0: int
+    amount_1: int
+    sqrt_price_x96:int
+    liquidity: int
+    tick:int
+    
+class UniswapV3SwapReport(NamedTuple):
+    sender:ChecksumAddress
+    recipient:ChecksumAddress
+    action:str
+    underlying_amount: int
+    collateral_amount: int
+    transaction_hash: HexBytes
+    log_index: int
+    block_number: int
+    transaction_index: int
+    
+class UniswapV3SwapEventData(BaseEventData):
+    def __new__(cls, address: ChecksumAddress, block_hash: HexBytes, block_number: int, log_index: int, transaction_hash: HexBytes, transaction_index: int, args: UniswapV3SwapArgs) -> 'UniswapV3SwapEventData':
+        return super().__new__(cls, address, block_hash, block_number, "Swap", log_index, transaction_hash, transaction_index)
+    
+    def __init__(self, address: ChecksumAddress, block_hash: HexBytes, block_number: int, log_index: int, transaction_hash: HexBytes, transaction_index: int, args:UniswapV3SwapArgs) -> None:
+        self.args = args
+        
+class UniswapV3QuoteExactInputSingleRespond(NamedTuple):
+    amount_received: int
+    sqrt_price_x96_after: int
+    intialized_ticks_crossed: int
+    gas_estimate: int
+    
+class UniswapV3QuoteExactOutputSingleRespond(NamedTuple):
+    amount_in: int
+    sqrt_price_x96_after: int
+    intialized_ticks_crossed: int
+    gas_estimate: int
