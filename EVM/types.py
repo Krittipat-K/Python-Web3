@@ -9,7 +9,6 @@ from web3.types import (
     Wei,
     Nonce,
 )
-from web3 import Web3
 
 class AccessListEntry(NamedTuple):
     address: HexStr

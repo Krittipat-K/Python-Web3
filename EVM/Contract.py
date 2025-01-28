@@ -1,14 +1,9 @@
 from web3 import (
     Web3,
-    AsyncWeb3,
-    AsyncHTTPProvider
 )
-from web3.middleware import ExtraDataToPOAMiddleware
 
 from hexbytes import HexBytes
 import asyncio
-from typing import (
-    Any,)
 from eth_typing import (
     ChecksumAddress,
     BlockIdentifier
@@ -18,9 +13,7 @@ from web3.contract.async_contract import (
     AsyncContractEvent
 )
 from web3.types import (
-    TxParams,
     Wei,
-    Nonce,
     
 )
 from web3.types import (
@@ -46,16 +39,10 @@ from EVM.types import (
     UniswapV3QuoteExactOutputSingleRespond,
 )
 
-from EVM.Constant import (
-    ERC20_ABI,
-    FWX_MEMBERSHIP_ABI,
-    FWX_MEMBERSHIP_ADDRESS_BASE,
-    FWX_PERP_CORE_ABI,
-    FWX_PERP_CORE_ADDRESS_BASE,
-    FWX_PERP_HELPER_ABI,
-    FWX_PERP_HELPER_ADDRESS_BASE,
-    MAX_UINT,
+from EVM.constant import (
     NATIVE_ADDRESS,
+    ERC20_ABI,
+    MAX_UINT,
     UNISWAPV2_POOL_ABI,
     UNISWAPV2_ROUTERV2_ABI,
     UNISWAPV2_ROUTERV2_ADDRESS_BASE,
@@ -63,7 +50,9 @@ from EVM.Constant import (
     UNISWAPV3_QUOTER_ABI,
     UNISWAPV3_QUOTER_ADDRESS_BASE,
     UNISWAPV3_ROUTERV2_ABI,
-    UNISWAPV3_ROUTERV2_ADDRESS_BASE
+    UNISWAPV3_ROUTERV2_ADDRESS_BASE,
+    L2_GAS_ESTIMATOR_ABI,
+    L2_GAS_ESTIMATOR_ADDRESS,
     
 )
 
@@ -71,6 +60,45 @@ from EVM.W3 import (
     AsyncWeb3HTTP,
     AsyncWeb3HTTPWallet
 )
+
+class AsyncL2GasEstimatorContractBase(AsyncWeb3HTTP):
+    
+    def __init__(self,
+                 rpc_detail: RPCDetail,
+                 address:AddressLike|None=None) -> None:
+        super().__init__(rpc_detail)
+        if address is None:
+            if rpc_detail.chain_id == 8453:
+                address = L2_GAS_ESTIMATOR_ADDRESS
+            else:
+                raise ValueError("address cannot be None")
+        else:
+            address = address
+            
+        self.address = Web3.to_checksum_address(address)
+        self.contract = self.load_contract(L2_GAS_ESTIMATOR_ABI,self.address)
+        
+    # Call function Section
+    
+    def getL1Fee(self,data:bytes) -> AsyncContractFunction:
+        
+        return self.contract.functions.getL1Fee(data)
+    
+class AsyncL2GasEstimatorContract(AsyncL2GasEstimatorContractBase):
+    
+    def __init__(self,
+                 rpc_detail: RPCDetail,
+                 address:AddressLike|None=None) -> None:
+        super().__init__(rpc_detail, address)
+        pass
+    
+    async def async_get_l1_fee(self,data:bytes) -> Wei:
+        
+        return await self.getL1Fee(data).call()
+    
+    async def async_get_l1_fee_with_label(self,data:bytes) -> tuple[bytes,Wei]:
+        
+        return data,await self.async_get_l1_fee(data)
 
 class AsyncERC20ContractBase(AsyncWeb3HTTP):
     
@@ -160,13 +188,13 @@ class AsyncERC20Contract(AsyncERC20ContractBase):
                                        transaction_index=base_event_data.transaction_index,
                                        args=transfer_args)
     
-    async def get_balance_of(self,address:ChecksumAddress,block_identifier:BlockIdentifier='latest') -> Wei:
+    async def async_get_balance_of(self,address:ChecksumAddress,block_identifier:BlockIdentifier='latest') -> Wei:
         
         return await self.balanceOf(address).call(block_identifier=block_identifier)
     
     async def async_get_balance_of_with_label(self,address:ChecksumAddress,block_identifier:BlockIdentifier='latest') -> tuple[ChecksumAddress,Wei]:
         
-        return address,await self.get_balance_of(address,block_identifier)
+        return address,await self.async_get_balance_of(address,block_identifier)
     
     async def async_get_allowance(self,owner:ChecksumAddress,spender:ChecksumAddress,block_identifier:BlockIdentifier='latest') -> Wei:
         
@@ -387,7 +415,7 @@ class AsyncUniswapV2PoolContract(AsyncUniswapV2PoolContractBase):
                                     block_number=swap_event_data.block_number,
                                     transaction_index=swap_event_data.transaction_index)
     
-class AsyncUniswapV3ContractBase(AsyncWeb3HTTP):
+class AsyncUniswapV3PoolContractBase(AsyncWeb3HTTP):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
@@ -537,7 +565,7 @@ class AsyncUniswapV3ContractBase(AsyncWeb3HTTP):
         
         return self.contract.events.Sync()
     
-class AsyncUniswapV3PoolContract(AsyncUniswapV3ContractBase):
+class AsyncUniswapV3PoolContract(AsyncUniswapV3PoolContractBase):
     
     def __init__(self, 
                  rpc_detail: RPCDetail, 
@@ -647,7 +675,7 @@ class AsyncUniswapV3QuoterContractBase(AsyncWeb3HTTP):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None) -> None:
+                 address:AddressLike|None=None) -> None:
         super().__init__(rpc_detail)
         if address is None:
             if rpc_detail.chain_id == 8453:
@@ -692,7 +720,7 @@ class AsyncUniswapV3QuoterContract(AsyncUniswapV3QuoterContractBase):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None) -> None:
+                 address:AddressLike|None=None) -> None:
         super().__init__(rpc_detail, address)
         pass
     
@@ -724,7 +752,7 @@ class AsyncUniswapV3RouterV2ContractBase(AsyncWeb3HTTP):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None) -> None:
+                 address:AddressLike|None=None) -> None:
         super().__init__(rpc_detail)
         if address is None:
             if rpc_detail.chain_id == 8453:
@@ -761,7 +789,7 @@ class AsyncUniswapV3RouterV2Contract(AsyncUniswapV3RouterV2ContractBase):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None) -> None:
+                 address:AddressLike|None=None) -> None:
         super().__init__(rpc_detail, address)
         pass
     
@@ -895,7 +923,7 @@ class AsyncUniswapV2RouterV2ContractBase(AsyncWeb3HTTP):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None) -> None:
+                 address:AddressLike|None=None) -> None:
         super().__init__(rpc_detail)
         if address is None:
             if rpc_detail.chain_id == 8453:
@@ -921,6 +949,18 @@ class AsyncUniswapV2RouterV2ContractBase(AsyncWeb3HTTP):
                         reserve_out:int) -> AsyncContractFunction:
             
             return self.contract.functions.getAmountOut(amount_in,reserve_in,reserve_out)
+        
+    def getAmountsIn(self,
+                        amount_out:int,
+                        path:list[ChecksumAddress]) -> AsyncContractFunction:
+        
+        return self.contract.functions.getAmountsIn(amount_out,path)
+    
+    def getAmountsOut(self,
+                        amount_in:int,
+                        path:list[ChecksumAddress]) -> AsyncContractFunction:
+        
+        return self.contract.functions.getAmountsOut(amount_in,path)
         
     # Transaction Section
     
@@ -1006,7 +1046,7 @@ class AsyncUniswapV2RouterV2Contract(AsyncUniswapV2RouterV2ContractBase):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None) -> None:
+                 address:AddressLike|None=None) -> None:
         super().__init__(rpc_detail, address)
         pass
     
@@ -1023,6 +1063,17 @@ class AsyncUniswapV2RouterV2Contract(AsyncUniswapV2RouterV2ContractBase):
                       reserve_out:int) -> int:
         
         return await self.getAmountOut(amount_in,reserve_in,reserve_out).call()
+    
+    async def async_get_amounts_in(self,
+                        amount_out:int,
+                        path:list[ChecksumAddress]) -> list[int]:
+        
+        return await self.getAmountsIn(amount_out,path).call()
+    
+    async def async_get_amounts_out(self,
+                        amount_in:int,
+                        path:list[ChecksumAddress]) -> list[int]:
+        return await self.getAmountsOut(amount_in,path).call()
     
     def swap_given_amount_out(self,
                               amount_out:int,

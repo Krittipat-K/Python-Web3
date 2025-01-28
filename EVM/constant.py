@@ -4,6 +4,9 @@ from eth_typing import (
 )
 from web3 import Web3
 
+MAX_UINT = 2**256 - 1
+NATIVE_ADDRESS = Web3.to_checksum_address("0x0000000000000000000000000000000000000000")
+
 CHAIN_DETAILS: Dict[str, Dict[str, Any]] = {
         "8453": {
                 "native": "ETH",
