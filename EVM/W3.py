@@ -8,7 +8,9 @@ from web3.middleware import ExtraDataToPOAMiddleware
 from hexbytes import HexBytes
 import asyncio
 from typing import (
-    Any,)
+    Any,
+    Optional,  
+    Dict)
 from eth_typing import (
     ChecksumAddress,
     BlockIdentifier
@@ -72,6 +74,7 @@ def get_chain_detail(chain_id:str)->ChainDetail:
         raise ValueError(f"Chain {chain_id} not found or not supported")
     
     token_details:dict[str,TokenDetail] = {}
+    address_map:dict[ChecksumAddress,str] = {}
     for token_symbol,token_detail in chain_detail['token_details'].items():
         token_details[token_symbol] = TokenDetail(
             symbol = token_detail['symbol'],
@@ -80,10 +83,7 @@ def get_chain_detail(chain_id:str)->ChainDetail:
             unit_type = token_detail['unit_type'],
             created_block = token_detail['created_block']
         )
-    
-    address_map:dict[ChecksumAddress,str] = {}
-    for address,alias in chain_detail['address_map'].items():
-        address_map[Web3.to_checksum_address(address)] = alias
+        address_map[Web3.to_checksum_address(Web3.to_checksum_address(token_detail['address']))] = token_detail['symbol']
     
     return ChainDetail(
         native = chain_detail['native'],
@@ -94,17 +94,13 @@ def get_chain_detail(chain_id:str)->ChainDetail:
     )
     
 def get_rpc_detail(rpc:str)->RPCDetail:
-    
-    try:
-        rpc_detail:dict[str,Any] = CHAIN_DETAILS[rpc]
-    except KeyError:
-        raise ValueError(f"RPC {rpc} not found or not supported")
-    
-    chain_detail = get_chain_detail(rpc_detail['chain_id'])
+    w3 = Web3(Web3.HTTPProvider(rpc))
+    chain_id = w3.eth.chain_id
+    chain_detail = get_chain_detail(str(chain_id))
     
     return RPCDetail(
-        rpc = rpc_detail['rpc'],
-        chain_id = int(rpc_detail['chain_id']),
+        rpc = rpc,
+        chain_id = chain_id,
         chain_detail = chain_detail
     )
     
@@ -135,10 +131,12 @@ class AsyncWeb3HTTP:
         return event.process_receipt(receipt,errors=error)
     
     async def async_get_event_data_with_block(self,
-                                    block:BlockIdentifier,
-                                    event:AsyncContractEvent,
-                                    error:EventLogErrorFlags=EventLogErrorFlags.Discard)->tuple[EventData]:
-            return await event.get_logs(block,errors=error)
+                                            event:AsyncContractEvent,
+                                            argument_filters: Optional[Dict[str, Any]] = None,
+                                            from_block: Optional[BlockIdentifier] = None,
+                                            to_block: Optional[BlockIdentifier] = None)->tuple[EventData]:
+        logs = await event.get_logs(from_block=from_block, to_block=to_block, argument_filters=argument_filters)
+        return logs
     
     async def async_get_balance_with_label(self,address:ChecksumAddress,block_identifier:BlockIdentifier='latest') -> tuple[ChecksumAddress,int]:
         balance = await self.w3.eth.get_balance(address,block_identifier)

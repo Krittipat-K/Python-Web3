@@ -1,14 +1,11 @@
 from typing import Optional
 from eth_typing import ChecksumAddress
 from web3 import Web3
-from hexbytes import HexBytes
-import asyncio
 import time
 
 from web3.types import (
     Wei,
     TxParams
-    # Nonce,
 )
 from EVM.constant import NATIVE_ADDRESS
 from EVM.ExeceptionType import InsufficientBalanceForSwap

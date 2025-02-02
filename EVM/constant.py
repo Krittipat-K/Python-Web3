@@ -87,8 +87,8 @@ CHAIN_DETAILS: Dict[str, Dict[str, Any]] = {
         },
         "43114": {
                 "native": "AVAX",
-                "wrap_native": "WAVAX",
-                "wrap_native_address": "0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7",
+                "wrapNative": "WAVAX",
+                "wrapNativeAddress": Web3.to_checksum_address("0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7"),
                 "token_details": {
                         "AVAX": {
                                 "symbol": "WAVAX",
@@ -10900,7 +10900,7 @@ FWX_DEX_ROUTER_ABI: list[dict[str, Any]] = [
   }
 ]
 
-L2_GAS_ESTIMATOR_ADDRESS = Web3.to_checksum_address('0xb528D11cC114E026F138fE568744c6D45ce6Da7A')
+L2_GAS_ESTIMATOR_ADDRESS = Web3.to_checksum_address('0x420000000000000000000000000000000000000F')
 L2_GAS_ESTIMATOR_ABI: list[dict[str, Any]] = [
     {
         "inputs": [],
