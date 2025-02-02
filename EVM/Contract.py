@@ -37,6 +37,14 @@ from EVM.types import (
     UniswapV3SwapEventData,
     UniswapV3QuoteExactInputSingleRespond,
     UniswapV3QuoteExactOutputSingleRespond,
+    FWXPerpCoreGetPositionRespond,
+    FWXPerpCoreOpenPositionArgs,
+    FWXPerpCoreOpenPositionEventData,
+    FWXPerpCoreClosePositionArgs,
+    FWXPerpCoreClosePositionEventData,
+    FWXPerpHelperGetBalanceRespond,
+    FWXPerpHelperGetAllPositionRespond,
+    FWXPerpCoreGetPositionRespond,
 )
 
 from EVM.constant import (
@@ -53,7 +61,12 @@ from EVM.constant import (
     UNISWAPV3_ROUTERV2_ADDRESS_BASE,
     L2_GAS_ESTIMATOR_ABI,
     L2_GAS_ESTIMATOR_ADDRESS,
-    
+    FWX_MEMBERSHIP_ABI,
+    FWX_MEMBERSHIP_ADDRESS_BASE,
+    FWX_PERP_CORE_ABI,
+    FWX_PERP_CORE_ADDRESS_BASE,
+    FWX_PERP_HELPER_ABI,
+    FWX_PERP_HELPER_ADDRESS_BASE,
 )
 
 from EVM.W3 import (
@@ -1147,3 +1160,269 @@ class AsyncUniswapV2RouterV2Contract(AsyncUniswapV2RouterV2ContractBase):
         
         else:
             return self.swapExactTokensForTokensSupportingFeeOnTransferTokens(amount_in,amount_out_min,path,recipient,deadline)
+
+class AsyncFWXMembershipContractBase(AsyncWeb3HTTP):
+    
+    def __init__(self,
+                 rpc_detail: RPCDetail,
+                 address:AddressLike|None=None) -> None:
+        super().__init__(rpc_detail)
+        if address is None:
+            if rpc_detail.chain_id == 8453:
+                address = FWX_MEMBERSHIP_ADDRESS_BASE
+            else:
+                raise ValueError("address cannot be None")
+        else:
+            address = address
+            
+        self.address = Web3.to_checksum_address(address)
+        self.contract = self.load_contract(FWX_MEMBERSHIP_ABI,self.address)
+        
+    # Call function Section
+    def getDefaultMembership(self,wallet_address:ChecksumAddress) -> AsyncContractFunction:
+        
+        return self.contract.functions.getDefaultMembership(wallet_address)
+    
+    # Transaction Section
+    
+    def mint(self,referral_id:int) -> AsyncContractFunction:
+        
+        return self.contract.functions.mint(referral_id)
+    
+class AsyncFWXMembershipContract(AsyncFWXMembershipContractBase):
+    
+    def __init__(self,
+                 rpc_detail: RPCDetail,
+                 address:AddressLike|None=None) -> None:
+        super().__init__(rpc_detail, address)
+        pass
+    
+    async def async_get_default_membership(self,wallet_address:ChecksumAddress) -> int:
+        
+        return await self.getDefaultMembership(wallet_address).call()
+    
+    
+class AsyncFWXPerpCoreContractBase(AsyncWeb3HTTP):
+    
+    def __init__(self,
+                 rpc_detail: RPCDetail,
+                 address:AddressLike|None=None) -> None:
+        super().__init__(rpc_detail)
+        if address is None:
+            if rpc_detail.chain_id == 8453:
+                address = FWX_PERP_CORE_ADDRESS_BASE
+            else:
+                raise ValueError("address cannot be None")
+        else:
+            address = address
+            
+        self.address = Web3.to_checksum_address(address)
+        self.contract = self.load_contract(FWX_PERP_CORE_ABI,self.address)
+        
+    def getPosition(self,
+                    nft_id:int,
+                    underlying_address:ChecksumAddress)->AsyncContractFunction:
+        
+        return self.contract.functions.getPosition(nft_id,underlying_address)
+    
+    
+    # Transaction Section
+    
+    def depositCollateral(self,
+                          nft_id:int,
+                          collateral_address:ChecksumAddress,
+                          underlying_address:ChecksumAddress,
+                          amount:int)->AsyncContractFunction:
+        
+        return self.contract.functions.depositCollateral(nft_id,collateral_address,underlying_address,amount)
+    
+    def withdrawCollateral(self,
+                           nft_id:int,
+                           collateral_address:ChecksumAddress,
+                           underlying_address:ChecksumAddress,
+                           amount:int,
+                           pyth_update_data:list[bytes])->AsyncContractFunction:
+        
+        return self.contract.functions.withdrawCollateral(nft_id,collateral_address,underlying_address,amount,pyth_update_data)
+    
+    def openPosition(self,
+                     nft_id:int,
+                     is_long:bool,
+                     collateral_address:ChecksumAddress,
+                     underlying_address:ChecksumAddress,
+                     contract_size_in_collateral:int,
+                     leverage:int,
+                     pyth_update_data:list[bytes])->AsyncContractFunction:
+        
+        return self.contract.functions.openPosition(nft_id,is_long,collateral_address,underlying_address,contract_size_in_collateral,leverage,pyth_update_data)
+    
+    def closePosition(self,
+                      nft_id:int,
+                      position_id:int,
+                      closing_size:int,
+                      pyth_update_data:list[bytes])->AsyncContractFunction:
+        
+        return self.contract.functions.closePosition(nft_id,position_id,closing_size,pyth_update_data)
+    
+    def closeAllPositions(self,
+                          nft_id:int,
+                          pyth_update_data:list[bytes])->AsyncContractFunction:
+        
+        return self.contract.functions.closeAllPositions(nft_id,pyth_update_data)
+    
+    # Event Section
+    
+    def eventOpenPosition(self) -> AsyncContractEvent:
+        
+        return self.contract.events.OpenPosition()
+    
+    def eventClosePosition(self) -> AsyncContractEvent:
+        
+        return self.contract.events.ClosePosition()
+    
+class AsyncFWXPerpCoreContract(AsyncFWXPerpCoreContractBase):
+    
+    def __init__(self,
+                 rpc_detail: RPCDetail,
+                 address:AddressLike|None=None) -> None:
+        super().__init__(rpc_detail, address)
+        pass
+    
+    async def async_get_position(self,
+                                 nft_id:int,
+                                 underlying_address:ChecksumAddress) -> FWXPerpCoreGetPositionRespond:
+        
+        res = await self.getPosition(nft_id,underlying_address).call()
+        
+        return FWXPerpCoreGetPositionRespond(*res)
+    
+    def get_process_open_position_event_log(self,event_log:EventData) -> FWXPerpCoreOpenPositionEventData:
+        
+        base_event_data,arg = self.process_event_data(event_log)
+        owener = Web3.to_checksum_address(arg['owner'])
+        nft_id = int(arg['nftId'])
+        position_id = int(arg['posId'])
+        entry_price = int(arg['entryPrice'])
+        leverage = int(arg['leverage'])
+        contract_size = int(arg['contractSize'])
+        is_long = arg['isLong']
+        pair_bytes = arg['pairByte']
+        collateral_swap_amount_locked = int(arg['collateralSwappedAmountLock'])
+        router_address = Web3.to_checksum_address(arg['router'])
+        
+        return FWXPerpCoreOpenPositionEventData(address=base_event_data.address,
+                                                block_hash=base_event_data.block_hash,
+                                                block_number=base_event_data.block_number,
+                                                transaction_hash=base_event_data.transaction_hash,
+                                                log_index=base_event_data.log_index,
+                                                transaction_index=base_event_data.transaction_index,
+                                                args=FWXPerpCoreOpenPositionArgs(owener,nft_id,position_id,entry_price,leverage,contract_size,is_long,pair_bytes,collateral_swap_amount_locked,router_address))
+        
+    def get_process_close_position_event_log(self,event_log:EventData) -> FWXPerpCoreClosePositionEventData:
+        base_event_data,arg = self.process_event_data(event_log)
+        owener = Web3.to_checksum_address(arg['owner'])
+        nft_id = int(arg['nftId'])
+        position_id = int(arg['posId'])
+        closing_size = int(arg['closingSize'])
+        closing_price = int(arg['closingPrice'])
+        pnl = int(arg['pnl'])
+        is_long = arg['isLong']
+        clooe_all_positions = arg['closeAllPosition']
+        pair_bytes = arg['pairByte']
+        collateral_swap_amount_unlocked = int(arg['collateralSwappedAmountUnlock'])
+        router_address = Web3.to_checksum_address(arg['router'])
+        
+        return FWXPerpCoreClosePositionEventData(address=base_event_data.address,
+                                                block_hash=base_event_data.block_hash,
+                                                block_number=base_event_data.block_number,
+                                                transaction_hash=base_event_data.transaction_hash,
+                                                log_index=base_event_data.log_index,
+                                                transaction_index=base_event_data.transaction_index,
+                                                args=FWXPerpCoreClosePositionArgs(owener,nft_id,position_id,closing_size,closing_price,pnl,is_long,clooe_all_positions,pair_bytes,collateral_swap_amount_unlocked,router_address))
+        
+class AsyncFWXPerpHelperContractBase(AsyncWeb3HTTP):
+    
+    def __init__(self,
+                 rpc_detail: RPCDetail,
+                 address:AddressLike|None=None) -> None:
+        super().__init__(rpc_detail)
+        if address is None:
+            if rpc_detail.chain_id == 8453:
+                address = FWX_PERP_HELPER_ADDRESS_BASE
+            else:
+                raise ValueError("address cannot be None")
+        else:
+            address = address
+            
+        self.address = Web3.to_checksum_address(address)
+        self.contract = self.load_contract(FWX_PERP_HELPER_ABI,self.address)
+        
+    # Call function Section
+    
+    def getMaxContractSize(self,
+                           perps_core_address:ChecksumAddress,
+                           nft_id:int,
+                           underlying_address:ChecksumAddress,
+                           is_new_long:bool,
+                           leverage:int,
+                           safety_factor:int,
+                           pyth_data:list[tuple[bytes,tuple[int,...],tuple[int,...]]])->AsyncContractFunction:
+        
+        return self.contract.functions.getMaxContractSize(perps_core_address,nft_id,underlying_address,is_new_long,leverage,safety_factor,pyth_data)
+    
+    def getBalance(self,
+                   perps_core_address:ChecksumAddress,
+                   nft_id:int,
+                   pyth_data:list[tuple[bytes,tuple[int,...],tuple[int,...]]])->AsyncContractFunction:
+        
+        return self.contract.functions.getBalance(perps_core_address,nft_id,pyth_data)
+    
+    def getAllActivePositions(self,
+                              perps_core_address:ChecksumAddress,
+                              nft_id:int,
+                              pyth_data:list[tuple[bytes,tuple[int,...],tuple[int,...]]])->AsyncContractFunction:
+        
+        return self.contract.functions.getAllActivePositions(perps_core_address,nft_id,pyth_data)
+ 
+class AsyncFWXPerpHelperContract(AsyncFWXPerpHelperContractBase):
+    
+    def __init__(self,
+                 rpc_detail: RPCDetail,
+                 address:AddressLike|None=None) -> None:
+        super().__init__(rpc_detail, address)
+        pass
+    
+    async def async_get_max_contract_size(self,
+                                          perps_core_address:ChecksumAddress,
+                                          nft_id:int,
+                                          underlying_address:ChecksumAddress,
+                                          is_new_long:bool,
+                                          leverage:int,
+                                          safety_factor:int,
+                                          pyth_data:list[tuple[bytes,tuple[int,...],tuple[int,...]]]) -> int:
+        
+        return await self.getMaxContractSize(perps_core_address,nft_id,underlying_address,is_new_long,leverage,safety_factor,pyth_data).call()
+    
+    async def async_get_balance(self,
+                                perps_core_address:ChecksumAddress,
+                                nft_id:int,
+                                pyth_data:list[tuple[bytes,tuple[int,...],tuple[int,...]]]) -> FWXPerpHelperGetBalanceRespond:
+        
+        res =  await self.getBalance(perps_core_address,nft_id,pyth_data).call()
+        return FWXPerpHelperGetBalanceRespond(*res)
+    
+    async def async_get_all_active_positions(self,
+                                            perps_core_address:ChecksumAddress,
+                                            nft_id:int,
+                                            pyth_data:list[tuple[bytes,tuple[int,...],tuple[int,...]]]) -> list[FWXPerpHelperGetAllPositionRespond]|None:
+        
+        res = await self.getAllActivePositions(perps_core_address,nft_id,pyth_data).call()
+        result:list[FWXPerpHelperGetAllPositionRespond] = []
+        for pos in res:
+            if len(pos) > 0:
+                result.append(FWXPerpHelperGetAllPositionRespond(*pos))
+                
+        if len(result) == 0:
+            return None
+        
+        return result
