@@ -2,6 +2,7 @@ from typing import Optional
 from eth_typing import ChecksumAddress
 from web3 import Web3
 import time
+import asyncio
 
 from web3.types import (
     Wei,
@@ -143,7 +144,7 @@ class AsyncUniswapV2SinglePoolSDK(AsyncWeb3HTTP):
     
 class AsyncUniswapV3SDK(AsyncWeb3HTTP):
     
-    async def __init__(self, 
+    def __init__(self, 
                  rpc_detail: RPCDetail,
                  pool_address:ChecksumAddress,
                  underlying_address:ChecksumAddress,
@@ -152,7 +153,7 @@ class AsyncUniswapV3SDK(AsyncWeb3HTTP):
         self.pool = AsyncUniswapV3PoolContract(rpc_detail,pool_address,underlying_address,collateral_address)
         self.quoter = AsyncUniswapV3QuoterContract(rpc_detail)
         self.router = AsyncUniswapV3RouterV2Contract(rpc_detail)
-        self.fee = await self.pool.async_get_fees()
+        self.fee = asyncio.run(self.pool.async_get_fees())
         
     async def async_trade_given_collateral(self,
                                  trading_order:float,

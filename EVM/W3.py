@@ -123,6 +123,13 @@ class AsyncWeb3HTTP:
     def load_contract(self,abi:Any,address:ChecksumAddress) -> AsyncContract:
         return self.w3.eth.contract(abi=abi,address=address)
     
+    def process_receipt(self,
+                                    receipt:TxReceipt,
+                                    event:AsyncContractEvent,
+                                    error:EventLogErrorFlags=EventLogErrorFlags.Discard)->tuple[EventData]:
+        
+        return event.process_receipt(receipt,errors=error)
+    
     async def async_get_event_data_with_txn(self,
                                  txn:HexBytes,
                                  event:AsyncContractEvent,
@@ -141,6 +148,11 @@ class AsyncWeb3HTTP:
     async def async_get_balance_with_label(self,address:ChecksumAddress,block_identifier:BlockIdentifier='latest') -> tuple[ChecksumAddress,int]:
         balance = await self.w3.eth.get_balance(address,block_identifier)
         return address,balance
+    
+    async def async_get_base_fee(self,
+                                 block_identifier:BlockIdentifier='pending')->Wei:
+        block_data = await self.w3.eth.get_block(block_identifier)
+        return block_data.get('baseFeePerGas', Wei(0))
     
     def process_event_data(self, event_data:EventData) -> tuple[BaseEventData, dict[str, Any]]:
         address: ChecksumAddress = Web3.to_checksum_address(event_data['address'])
@@ -164,14 +176,9 @@ class AsyncWeb3HTTPWallet(AsyncWeb3HTTP):
         self.wallet_address:ChecksumAddress = account.address
         self.last_nonce:Nonce|None = None
         pass 
-    async def async_get_base_fee(self,
-                                 block_identifier:BlockIdentifier='pending')->Wei:
-        block_data = await self.w3.eth.get_block(block_identifier)
-        return block_data.get('baseFeePerGas', Wei(0))
     
     async def async_create_txn_params(self,
-                          tx_params_input:TxParamsInput=TxParamsInput(),
-                          max_fee_multiplier:float=2) -> TxParams:
+                                      tx_params_input:TxParamsInput=TxParamsInput(),) -> TxParams:
         
         txn_params:TxParams = {'from':self.wallet_address,
                                'chainId':self.chain_id}
@@ -181,6 +188,10 @@ class AsyncWeb3HTTPWallet(AsyncWeb3HTTP):
                 self.last_nonce = Nonce(0)
             nonce:Nonce = max(self.last_nonce,await self.w3.eth.get_transaction_count(self.wallet_address))
             txn_params['nonce'] = nonce
+            
+        for key,value in tx_params_input._asdict().items():
+            if value is not None:
+                txn_params[key] = value
             
         return txn_params
     

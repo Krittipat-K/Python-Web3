@@ -44,7 +44,6 @@ from EVM.types import (
     FWXPerpCoreClosePositionEventData,
     FWXPerpHelperGetBalanceRespond,
     FWXPerpHelperGetAllPositionRespond,
-    FWXPerpCoreGetPositionRespond,
 )
 
 from EVM.constant import (
