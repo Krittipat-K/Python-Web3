@@ -7,6 +7,7 @@ from typing import (
 from eth_typing import (
     ChecksumAddress,
 )
+import asyncio
 
 from EVM.constant import (
     FWX_MEMBERSHIP_ADDRESS_BASE,
@@ -62,7 +63,7 @@ def create_pyth_update_fwx_data(raw_pyth_data:dict[str,Any])->list[bytes]:
 
 class FWXPerpSDK(AsyncWeb3HTTPWallet):
     
-    async def __init__(self,
+    def __init__(self,
                  rpc_detail: RPCDetail,
                  private_key: str,
                  referal_id:int=0,
@@ -75,7 +76,9 @@ class FWXPerpSDK(AsyncWeb3HTTPWallet):
         self.core = AsyncFWXPerpCoreContract(rpc_detail, core_address)
         self.helper = AsyncFWXPerpHelperContract(rpc_detail, helper_address)
         self.usdc = AsyncERC20Contract(rpc_detail, self.token_details['usdc'].address)
-        
+        asyncio.run(self.get_nft_id(referal_id))
+            
+    async def get_nft_id(self,referal_id:int=0)->None:
         self.nft_id = await self.membership.async_get_default_membership(self.wallet_address)
         if self.nft_id == 0:
             print("Minting NFT ID")
@@ -83,7 +86,6 @@ class FWXPerpSDK(AsyncWeb3HTTPWallet):
             txn = await self.async_send_transaction(txn_params)
             await self.w3.eth.wait_for_transaction_receipt(txn)
             self.nft_id = await self.membership.async_get_default_membership(self.wallet_address)
-            
         
     async def get_perp_balance(self,
                                      nft_id:int=0)->FWXPerpHelperGetBalanceRespond:
