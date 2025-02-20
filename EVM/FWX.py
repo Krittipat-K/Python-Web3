@@ -45,7 +45,19 @@ def get_raw_pyth_fwx_data()->dict[str,Any]:
         data = requests.get(url).json()
         return data
     
-def create_pyth_fwx_data(raw_pyth_data:dict[str,Any])->list[tuple[bytes,tuple[int,...],tuple[int,...]]]:
+def get_raw_pyth_data(list_of_pyth_id: list[str])->dict[str,Any]:
+    base_url = 'https://hermes.pyth.network/v2/updates/price/latest'
+    endpoint = ''
+    for i in range(len(list_of_pyth_id)):
+        if i == 0:
+            endpoint += f'?ids%5B%5D={list_of_pyth_id[i]}'
+        else:
+            endpoint += f'&ids%5B%5D={list_of_pyth_id[i]}'
+    url = base_url + endpoint
+    data = requests.get(url).json()
+    return data
+    
+def create_pyth_data(raw_pyth_data:dict[str,Any])->list[tuple[bytes,tuple[int,...],tuple[int,...]]]:
     pyth_data:list[tuple[bytes,tuple[int,...],tuple[int,...]]] = []
     for i in raw_pyth_data['parsed']:
         
@@ -57,7 +69,7 @@ def create_pyth_fwx_data(raw_pyth_data:dict[str,Any])->list[tuple[bytes,tuple[in
         
     return pyth_data
 
-def create_pyth_update_fwx_data(raw_pyth_data:dict[str,Any])->list[bytes]:
+def create_pyth_update_data(raw_pyth_data:dict[str,Any])->list[bytes]:
     
     return [bytes.fromhex(raw_pyth_data['binary']['data'][0])]
 
@@ -75,7 +87,7 @@ class FWXPerpSDK(AsyncWeb3HTTPWallet):
         self.membership = AsyncFWXMembershipContract(rpc_detail, membership_address)
         self.core = AsyncFWXPerpCoreContract(rpc_detail, core_address)
         self.helper = AsyncFWXPerpHelperContract(rpc_detail, helper_address)
-        self.usdc = AsyncERC20Contract(rpc_detail, self.token_details['usdc'].address)
+        self.usdc = AsyncERC20Contract(rpc_detail, self.token_details['USDC'].address)
         asyncio.run(self.get_nft_id(referal_id))
             
     async def get_nft_id(self,referal_id:int=0)->None:
@@ -92,16 +104,16 @@ class FWXPerpSDK(AsyncWeb3HTTPWallet):
         if nft_id == 0:
             nft_id = self.nft_id
         raw_pyth_data = get_raw_pyth_fwx_data()
-        pyth_data = create_pyth_fwx_data(raw_pyth_data)
+        pyth_data = create_pyth_data(raw_pyth_data)
         
         return await self.helper.async_get_balance(self.core.address,nft_id,pyth_data)
     
-    async def get_all_positions(self,nft_id:int) -> list[FWXPerpHelperGetAllPositionRespond]|None:
+    async def get_all_positions(self,nft_id:int=0) -> list[FWXPerpHelperGetAllPositionRespond]|None:
         
         if nft_id == 0:
             nft_id = self.nft_id
         raw_pyth_data = get_raw_pyth_fwx_data()
-        pyth_data = create_pyth_fwx_data(raw_pyth_data)
+        pyth_data = create_pyth_data(raw_pyth_data)
         
         return await self.helper.async_get_all_active_positions(self.core.address,
                                                                 nft_id,
@@ -141,7 +153,7 @@ class FWXPerpSDK(AsyncWeb3HTTPWallet):
                               is_new_long:bool,
                               leverage:int,
                               safety_factor:int=980000)->int:
-        pyth_data = create_pyth_fwx_data(raw_pyth_data)
+        pyth_data = create_pyth_data(raw_pyth_data)
         leverage = leverage*10**18
         
         return await self.helper.async_get_max_contract_size(self.core.address,
@@ -166,7 +178,7 @@ class FWXPerpSDK(AsyncWeb3HTTPWallet):
             contract_size = max_contract_size
             print("Contract size is too large, setting to max contract size")
         leverage = leverage*10**18
-        pyth_updata_data = create_pyth_update_fwx_data(raw_pyth_data)
+        pyth_updata_data = create_pyth_update_data(raw_pyth_data)
         value = 25
         func = self.core.openPosition(self.nft_id,
                                       is_long,
@@ -187,9 +199,9 @@ class FWXPerpSDK(AsyncWeb3HTTPWallet):
     def get_contract_size_given_volumn(self,
                                        volume:float,
                                        underlying_symbol:str,
-                                       )->tuple[float,dict[str,Any]]:
+                                       raw_pyth_data:dict[str,Any],
+                                       )->float:
         contract_size = 0
-        raw_pyth_data = get_raw_pyth_fwx_data()
         for i in raw_pyth_data['parsed']:
             if i['id'] == PYTH_ID[underlying_symbol]:
                 price = int(i['price']['price'])*10**i['price']['expo']
@@ -200,7 +212,7 @@ class FWXPerpSDK(AsyncWeb3HTTPWallet):
             raise ValueError("Invalid underlying symbol")
     
             
-        return contract_size,raw_pyth_data
+        return contract_size
     
     async def open_position_given_contract_size(self,
                                           is_long:bool,
@@ -224,6 +236,26 @@ class FWXPerpSDK(AsyncWeb3HTTPWallet):
                                                                    tx_params_input,
                                                                    waiting_txn)
         
+    async def open_position_given_volumn(self,
+                                            is_long:bool,
+                                            volume:float,
+                                            leverage:int,
+                                            underlying_address:ChecksumAddress,
+                                            raw_pyth_data:dict[str,Any],
+                                            is_new_long:bool,
+                                            tx_params_input:TxParamsInput=TxParamsInput(),
+                                            waiting_txn:bool=True)->HexBytes:
+            contract_size = self.get_contract_size_given_volumn(volume,self.address_map[underlying_address],raw_pyth_data)
+            
+            return await self.open_position_given_contract_size(is_long,
+                                                                 contract_size,
+                                                                 leverage,
+                                                                 underlying_address,
+                                                                 raw_pyth_data,
+                                                                 is_new_long,
+                                                                 tx_params_input,
+                                                                 waiting_txn)
+        
     async def close_position_with_pos_id(self,
                                          pos_id:int,
                                          closing_size:int,
@@ -232,7 +264,7 @@ class FWXPerpSDK(AsyncWeb3HTTPWallet):
         
         raw_pyth_data = get_raw_pyth_fwx_data()
         value = len(raw_pyth_data['parsed']) + len(raw_pyth_data['binary'])
-        pyth_update_data = create_pyth_update_fwx_data(raw_pyth_data)
+        pyth_update_data = create_pyth_update_data(raw_pyth_data)
         func =  self.core.closePosition(self.nft_id,
                                         pos_id,
                                         closing_size,
