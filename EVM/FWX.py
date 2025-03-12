@@ -16,6 +16,11 @@ from EVM.constant import (
     PYTH_ID,
 )
 
+from web3.types import (
+    TxParams,
+    Wei
+)
+
 from EVM.types import (
     TxParamsInput,
     RPCDetail,
@@ -24,15 +29,9 @@ from EVM.types import (
 )
 
 from EVM.W3 import (
-    AsyncWeb3HTTP,
+
     AsyncWeb3HTTPWallet,
 )
-
-from web3.types import (
-    TxParams,
-)
-
-
 from EVM.Contract import (
     AsyncERC20Contract,
     AsyncFWXMembershipContract,
@@ -40,6 +39,121 @@ from EVM.Contract import (
     AsyncFWXPerpHelperContract,
 )
 
+class FWXPerp:
+    
+    def __init__(self,
+                 rpc_detail: RPCDetail,
+                 membership_address:ChecksumAddress=FWX_MEMBERSHIP_ADDRESS_BASE,
+                 core_address:ChecksumAddress=FWX_PERP_CORE_ADDRESS_BASE,
+                 helper_address:ChecksumAddress=FWX_PERP_HELPER_ADDRESS_BASE,) -> None:
+        
+        self.membership = AsyncFWXMembershipContract(rpc_detail, membership_address)
+        self.core = AsyncFWXPerpCoreContract(rpc_detail, core_address)
+        self.helper = AsyncFWXPerpHelperContract(rpc_detail, helper_address)
+        self.usdc = AsyncERC20Contract(rpc_detail, self.core.token_details['USDC'].address)
+        
+    async def get_perp_balance(self,
+                               nft_id:int)->FWXPerpHelperGetBalanceRespond:
+        raw_pyth_data = get_raw_pyth_fwx_data()
+        pyth_data = create_pyth_data(raw_pyth_data)
+        
+        return await self.helper.async_get_balance(self.core.address,nft_id,pyth_data)
+
+    async def get_all_positions(self,nft_id:int) -> list[FWXPerpHelperGetAllPositionRespond]|None:
+        raw_pyth_data = get_raw_pyth_fwx_data()
+        pyth_data = create_pyth_data(raw_pyth_data)
+        
+        return await self.helper.async_get_all_active_positions(self.core.address,
+                                                                nft_id,
+                                                                pyth_data)
+        
+    async def deposit_collateral_in_wei(self,
+                                        nft_id:int,
+                                        amount:int,
+                                        underlying_address:ChecksumAddress,)->TxParams:
+        deposit_func = self.core.depositCollateral(nft_id,self.usdc.address,underlying_address,amount)
+        return self.core.build_tx_params_with_func(deposit_func)
+    
+    async def get_max_contract_size(self,
+                                    nft_id:int,
+                              underlying_address:ChecksumAddress,
+                              raw_pyth_data:dict[str,Any],
+                              is_new_long:bool,
+                              leverage:int,
+                              safety_factor:int=980000)->int:
+        pyth_data = create_pyth_data(raw_pyth_data)
+        leverage = leverage*10**18
+        
+        return await self.helper.async_get_max_contract_size(self.core.address,
+                                                nft_id,
+                                                underlying_address,
+                                                is_new_long,
+                                                leverage,
+                                                safety_factor,
+                                                pyth_data)
+        
+    async def open_position_given_contract_size_in_wei(self,
+                                                       nft_id:int,
+                                                       is_long:bool,
+                                                       is_new_long:bool,
+                                                       contract_size:int,
+                                                       leverage:int,
+                                                       underlying_address:ChecksumAddress,
+                                                       raw_pyth_data:dict[str,Any],
+                                                       tx_params_input:TxParamsInput=TxParamsInput(),
+                                                       waiting_txn:bool=True)->TxParams:
+        max_contract_size = await self.get_max_contract_size(nft_id,underlying_address,raw_pyth_data,is_new_long,leverage)
+        if contract_size > max_contract_size:
+            contract_size = max_contract_size
+            print("Contract size is too large, setting to max contract size")
+        leverage = leverage*10**18
+        pyth_updata_data = create_pyth_update_data(raw_pyth_data)
+        value = len(raw_pyth_data['parsed']) + len(raw_pyth_data['binary'])
+        func = self.core.openPosition(nft_id,
+                                      is_long,
+                                      self.usdc.address,
+                                      underlying_address,
+                                      contract_size,
+                                      leverage,
+                                      pyth_updata_data,
+                                      )
+        tx_params = self.core.build_tx_params_with_func(func)
+        tx_params['value'] = Wei(value)
+        return tx_params
+    
+    def get_contract_size_given_volumn(self,
+                                       volume:float,
+                                       underlying_symbol:str,
+                                       raw_pyth_data:dict[str,Any],
+                                       )->float:
+        contract_size = 0
+        for i in raw_pyth_data['parsed']:
+            if i['id'] == PYTH_ID[underlying_symbol]:
+                price = int(i['price']['price'])*10**i['price']['expo']
+                contract_size = volume/price
+                break
+            
+        if contract_size == 0:
+            raise ValueError("Invalid underlying symbol")
+            
+        return contract_size
+    
+    async def close_position_with_pos_id(self,
+                                         nft_id:int,
+                                         pos_id:int,
+                                         closing_size:int,)->TxParams:
+        
+        raw_pyth_data = get_raw_pyth_fwx_data()
+        value = len(raw_pyth_data['parsed']) + len(raw_pyth_data['binary'])
+        pyth_update_data = create_pyth_update_data(raw_pyth_data)
+        func =  self.core.closePosition(nft_id,
+                                        pos_id,
+                                        closing_size,
+                                        pyth_update_data)
+        tx_params = self.core.build_tx_params_with_func(func)
+        tx_params['value'] = Wei(value)
+        return tx_params
+        
 def get_raw_pyth_fwx_data()->dict[str,Any]:
         url = 'https://hermes-pyth.fwx.finance/?pyth=perp&encoding=hex'
         data = requests.get(url).json()
@@ -118,7 +232,6 @@ class FWXPerpSDK(AsyncWeb3HTTPWallet):
         return await self.helper.async_get_all_active_positions(self.core.address,
                                                                 nft_id,
                                                                 pyth_data)
-        
         
     async def deposit_collateral_in_wei(self,
                                         amount:int,
@@ -210,7 +323,6 @@ class FWXPerpSDK(AsyncWeb3HTTPWallet):
             
         if contract_size == 0:
             raise ValueError("Invalid underlying symbol")
-    
             
         return contract_size
     

@@ -1,5 +1,12 @@
+from typing import Any
 from web3 import (
     Web3,
+)
+from web3._utils.contracts import (
+    prepare_transaction,
+)
+from eth_utils.abi import (
+    abi_to_signature,
 )
 
 from hexbytes import HexBytes
@@ -14,6 +21,7 @@ from web3.contract.async_contract import (
 )
 from web3.types import (
     Wei,
+    TxParams
     
 )
 from web3.types import (
@@ -73,22 +81,33 @@ from EVM.W3 import (
     AsyncWeb3HTTPWallet
 )
 
-class AsyncL2GasEstimatorContractBase(AsyncWeb3HTTP):
+class AsyncBaseContract(AsyncWeb3HTTP):
+    
+    def __init__(self, rpc_detail: RPCDetail,abi:Any,address:AddressLike) -> None:
+        super().__init__(rpc_detail)
+        self.address = Web3.to_checksum_address(address)
+        self.contract = self.load_contract(abi,self.address)
+        pass
+    
+    def get_func_data(self,
+                      func:AsyncContractFunction,)->TxParams:
+        abi_element_identifier = abi_to_signature(func.abi)
+        return prepare_transaction(self.address,
+                                   self.w3,
+                                   abi_element_identifier,
+                                   self.contract.abi,
+                                   func.abi,
+                                   *func.args or (),
+                                   **func.kwargs or {})
+
+class AsyncL2GasEstimatorContractBase(AsyncBaseContract):
+    
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None=None) -> None:
-        super().__init__(rpc_detail)
-        if address is None:
-            if rpc_detail.chain_id == 8453:
-                address = L2_GAS_ESTIMATOR_ADDRESS
-            else:
-                raise ValueError("address cannot be None")
-        else:
-            address = address
-            
-        self.address = Web3.to_checksum_address(address)
-        self.contract = self.load_contract(L2_GAS_ESTIMATOR_ABI,self.address)
+                 abi:Any = L2_GAS_ESTIMATOR_ABI,
+                 address:AddressLike=L2_GAS_ESTIMATOR_ADDRESS) -> None:
+        super().__init__(rpc_detail,abi,address)
         
     # Call function Section
     
@@ -98,11 +117,11 @@ class AsyncL2GasEstimatorContractBase(AsyncWeb3HTTP):
     
 class AsyncL2GasEstimatorContract(AsyncL2GasEstimatorContractBase):
     
-    def __init__(self,
-                 rpc_detail: RPCDetail,
-                 address:AddressLike|None=None) -> None:
-        super().__init__(rpc_detail, address)
-        pass
+    def __init__(self, 
+                 rpc_detail: RPCDetail, 
+                 abi: Any = L2_GAS_ESTIMATOR_ABI, 
+                 address: AddressLike= L2_GAS_ESTIMATOR_ADDRESS) -> None:
+        super().__init__(rpc_detail, abi, address)
     
     async def async_get_l1_fee(self,data:bytes) -> Wei:
         
@@ -112,14 +131,13 @@ class AsyncL2GasEstimatorContract(AsyncL2GasEstimatorContractBase):
         
         return data,await self.async_get_l1_fee(data)
 
-class AsyncERC20ContractBase(AsyncWeb3HTTP):
+class AsyncERC20ContractBase(AsyncBaseContract):
     
-    def __init__(self, 
+    def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike) -> None:
-        super().__init__(rpc_detail)
-        self.address = Web3.to_checksum_address(address)
-        self.contract = self.load_contract(ERC20_ABI,self.address)
+                 address:AddressLike,
+                 abi:Any = ERC20_ABI,) -> None:
+        super().__init__(rpc_detail,abi,address)
         
     # Call function Section
     
@@ -167,8 +185,11 @@ class AsyncERC20ContractBase(AsyncWeb3HTTP):
     
 class AsyncERC20Contract(AsyncERC20ContractBase):
     
-    def __init__(self, rpc_detail: RPCDetail, address: AddressLike) -> None:
-        super().__init__(rpc_detail, address)
+    def __init__(self, 
+                 rpc_detail: RPCDetail, 
+                 address: AddressLike, 
+                 abi: Any = ERC20_ABI) -> None:
+        super().__init__(rpc_detail, address, abi)
         try:
             self.token_symbol = rpc_detail.chain_detail.address_map[self.address]
             self.decimal = rpc_detail.chain_detail.token_details[self.token_symbol].decimal
@@ -238,15 +259,13 @@ class AsyncERC20Contract(AsyncERC20ContractBase):
         else:
             return allowance
         
-class AsyncUniswapV2PoolContractBase(AsyncWeb3HTTP):
+class AsyncUniswapV2PoolContractBase(AsyncBaseContract):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike) -> None:
-        super().__init__(rpc_detail)
-        self.address = Web3.to_checksum_address(address)
-        self.contract = self.load_contract(UNISWAPV2_POOL_ABI,self.address)
-        
+                 address:AddressLike,
+                 abi:Any = UNISWAPV2_POOL_ABI,) -> None:
+        super().__init__(rpc_detail,abi,address)
     # Call function Section
     
     def getReserves(self) -> AsyncContractFunction:
@@ -328,8 +347,9 @@ class AsyncUniswapV2PoolContract(AsyncUniswapV2PoolContractBase):
                  rpc_detail: RPCDetail, 
                  pool_address:AddressLike,
                  underlying_address:ChecksumAddress,
-                 collateral_address:ChecksumAddress) -> None:
-        super().__init__(rpc_detail, pool_address)
+                 collateral_address:ChecksumAddress,
+                 abi:Any=UNISWAPV2_POOL_ABI) -> None:
+        super().__init__(rpc_detail, pool_address,abi)
         self.underlying = AsyncERC20Contract(rpc_detail,underlying_address)
         self.collateral = AsyncERC20Contract(rpc_detail,collateral_address)
         token0 = asyncio.run(self.async_get_token_0_address())
@@ -427,14 +447,13 @@ class AsyncUniswapV2PoolContract(AsyncUniswapV2PoolContractBase):
                                     block_number=swap_event_data.block_number,
                                     transaction_index=swap_event_data.transaction_index)
     
-class AsyncUniswapV3PoolContractBase(AsyncWeb3HTTP):
+class AsyncUniswapV3PoolContractBase(AsyncBaseContract):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike) -> None:
-        super().__init__(rpc_detail)
-        self.address = Web3.to_checksum_address(address)
-        self.contract = self.load_contract(UNISWAPV3_POOL_ABI,self.address)
+                 address:AddressLike,
+                 abi:Any = UNISWAPV3_POOL_ABI,) -> None:
+        super().__init__(rpc_detail,abi,address)
         
     # Call function Section
     def factory(self) -> AsyncContractFunction:
@@ -583,8 +602,9 @@ class AsyncUniswapV3PoolContract(AsyncUniswapV3PoolContractBase):
                  rpc_detail: RPCDetail, 
                  pool_address:AddressLike,
                  underlying_address:ChecksumAddress,
-                 collateral_address:ChecksumAddress) -> None:
-        super().__init__(rpc_detail, pool_address)
+                 collateral_address:ChecksumAddress,
+                 abi:Any = UNISWAPV3_POOL_ABI) -> None:
+        super().__init__(rpc_detail, pool_address,abi=abi)
         self.underlying = AsyncERC20Contract(rpc_detail,underlying_address)
         self.collateral = AsyncERC20Contract(rpc_detail,collateral_address)
         token0 = asyncio.run(self.async_get_token_0_address())
@@ -683,22 +703,13 @@ class AsyncUniswapV3PoolContract(AsyncUniswapV3PoolContractBase):
                 
         return UniswapV3SwapReport(sender,recipient,action,underlying_amount,collateral_amount,transaction_hash,log_index,block_number,transaction_index)
     
-class AsyncUniswapV3QuoterContractBase(AsyncWeb3HTTP):
+class AsyncUniswapV3QuoterContractBase(AsyncBaseContract):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None=None) -> None:
-        super().__init__(rpc_detail)
-        if address is None:
-            if rpc_detail.chain_id == 8453:
-                address = UNISWAPV3_QUOTER_ADDRESS_BASE
-            else:
-                raise ValueError("address cannot be None")
-        else:
-            address = address
-            
-        self.address = Web3.to_checksum_address(address)
-        self.contract = self.load_contract(UNISWAPV3_QUOTER_ABI,self.address)
+                 address:AddressLike = UNISWAPV3_QUOTER_ADDRESS_BASE,
+                 abi:Any = UNISWAPV3_QUOTER_ABI,) -> None:
+        super().__init__(rpc_detail,abi,address)
         
     def factory(self) -> AsyncContractFunction:
         
@@ -732,8 +743,9 @@ class AsyncUniswapV3QuoterContract(AsyncUniswapV3QuoterContractBase):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None=None) -> None:
-        super().__init__(rpc_detail, address)
+                 address:AddressLike=UNISWAPV3_QUOTER_ADDRESS_BASE,
+                 abi:Any=UNISWAPV3_QUOTER_ABI) -> None:
+        super().__init__(rpc_detail, address,abi)
         pass
     
     async def async_quote_exact_input_single(self,token_in:ChecksumAddress,token_out:ChecksumAddress,amount_in:int,fee:int,sqrt_price_limit_X96:int) -> UniswapV3QuoteExactInputSingleRespond:
@@ -760,22 +772,13 @@ class AsyncUniswapV3QuoterContract(AsyncUniswapV3QuoterContractBase):
         
         return UniswapV3QuoteExactOutputSingleRespond(*res)
     
-class AsyncUniswapV3RouterV2ContractBase(AsyncWeb3HTTP):
+class AsyncUniswapV3RouterV2ContractBase(AsyncERC20ContractBase):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None=None) -> None:
-        super().__init__(rpc_detail)
-        if address is None:
-            if rpc_detail.chain_id == 8453:
-                address = UNISWAPV3_ROUTERV2_ADDRESS_BASE
-            else:
-                raise ValueError("address cannot be None")
-        else:
-            address = address
-            
-        self.address = Web3.to_checksum_address(address)
-        self.contract = self.load_contract(UNISWAPV3_ROUTERV2_ABI,self.address)
+                 address:AddressLike = UNISWAPV3_ROUTERV2_ADDRESS_BASE,
+                 abi:Any = UNISWAPV3_ROUTERV2_ABI,) -> None:
+        super().__init__(rpc_detail,address,abi)
         
     def exactInputSingle(self,token_in:ChecksumAddress,token_out:ChecksumAddress,fee:int,recipient:ChecksumAddress,amount_in:int,amount_out_minimum:int,sqrt_price_limit_x96:int) -> AsyncContractFunction:
         
@@ -801,8 +804,9 @@ class AsyncUniswapV3RouterV2Contract(AsyncUniswapV3RouterV2ContractBase):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None=None) -> None:
-        super().__init__(rpc_detail, address)
+                 address:AddressLike=UNISWAPV3_ROUTERV2_ADDRESS_BASE,
+                 abi:Any=UNISWAPV3_ROUTERV2_ABI) -> None:
+        super().__init__(rpc_detail, address,abi)
         pass
     
     def single_swap_exact_input_token_to_token(self,
@@ -931,22 +935,13 @@ class AsyncUniswapV3RouterV2Contract(AsyncUniswapV3RouterV2ContractBase):
         else:
             return self.single_swap_exact_output_token_to_token(token_in,token_out,fee,recipient,amount_out,amount_in_maximum,sqrt_price_limit_x96)
         
-class AsyncUniswapV2RouterV2ContractBase(AsyncWeb3HTTP):
+class AsyncUniswapV2RouterV2ContractBase(AsyncERC20ContractBase):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None=None) -> None:
-        super().__init__(rpc_detail)
-        if address is None:
-            if rpc_detail.chain_id == 8453:
-                address = UNISWAPV2_ROUTERV2_ADDRESS_BASE
-            else:
-                raise ValueError("address cannot be None")
-        else:
-            address = address
-            
-        self.address = Web3.to_checksum_address(address)
-        self.contract = self.load_contract(UNISWAPV2_ROUTERV2_ABI,self.address)
+                 address:AddressLike = UNISWAPV3_ROUTERV2_ADDRESS_BASE,
+                 abi:Any = UNISWAPV2_ROUTERV2_ADDRESS_BASE,) -> None:
+        super().__init__(rpc_detail,address,abi)
         
     def getAmountIn(self,
                     amount_out:int,
@@ -1058,8 +1053,9 @@ class AsyncUniswapV2RouterV2Contract(AsyncUniswapV2RouterV2ContractBase):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None=None) -> None:
-        super().__init__(rpc_detail, address)
+                 address:AddressLike=UNISWAPV2_ROUTERV2_ADDRESS_BASE,
+                 abi:Any=UNISWAPV2_ROUTERV2_ABI) -> None:
+        super().__init__(rpc_detail, address,abi)
         pass
     
     async def async_get_amount_in(self,
@@ -1160,22 +1156,13 @@ class AsyncUniswapV2RouterV2Contract(AsyncUniswapV2RouterV2ContractBase):
         else:
             return self.swapExactTokensForTokensSupportingFeeOnTransferTokens(amount_in,amount_out_min,path,recipient,deadline)
 
-class AsyncFWXMembershipContractBase(AsyncWeb3HTTP):
+class AsyncFWXMembershipContractBase(AsyncERC20ContractBase):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None=None) -> None:
-        super().__init__(rpc_detail)
-        if address is None:
-            if rpc_detail.chain_id == 8453:
-                address = FWX_MEMBERSHIP_ADDRESS_BASE
-            else:
-                raise ValueError("address cannot be None")
-        else:
-            address = address
-            
-        self.address = Web3.to_checksum_address(address)
-        self.contract = self.load_contract(FWX_MEMBERSHIP_ABI,self.address)
+                 address:AddressLike = FWX_MEMBERSHIP_ADDRESS_BASE,
+                 abi:Any = FWX_MEMBERSHIP_ABI,) -> None:
+        super().__init__(rpc_detail,address,abi)
         
     # Call function Section
     def getDefaultMembership(self,wallet_address:ChecksumAddress) -> AsyncContractFunction:
@@ -1192,8 +1179,9 @@ class AsyncFWXMembershipContract(AsyncFWXMembershipContractBase):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None=None) -> None:
-        super().__init__(rpc_detail, address)
+                 address:AddressLike=FWX_MEMBERSHIP_ADDRESS_BASE,
+                 abi:Any = FWX_MEMBERSHIP_ABI) -> None:
+        super().__init__(rpc_detail, address,abi)
         pass
     
     async def async_get_default_membership(self,wallet_address:ChecksumAddress) -> int:
@@ -1201,22 +1189,13 @@ class AsyncFWXMembershipContract(AsyncFWXMembershipContractBase):
         return await self.getDefaultMembership(wallet_address).call()
     
     
-class AsyncFWXPerpCoreContractBase(AsyncWeb3HTTP):
+class AsyncFWXPerpCoreContractBase(AsyncERC20ContractBase):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None=None) -> None:
-        super().__init__(rpc_detail)
-        if address is None:
-            if rpc_detail.chain_id == 8453:
-                address = FWX_PERP_CORE_ADDRESS_BASE
-            else:
-                raise ValueError("address cannot be None")
-        else:
-            address = address
-            
-        self.address = Web3.to_checksum_address(address)
-        self.contract = self.load_contract(FWX_PERP_CORE_ABI,self.address)
+                 address:AddressLike = FWX_PERP_CORE_ADDRESS_BASE,
+                 abi:Any = FWX_PERP_CORE_ABI,) -> None:
+        super().__init__(rpc_detail,address,abi)
         
     def getPosition(self,
                     nft_id:int,
@@ -1224,9 +1203,7 @@ class AsyncFWXPerpCoreContractBase(AsyncWeb3HTTP):
         
         return self.contract.functions.getPosition(nft_id,underlying_address)
     
-    
     # Transaction Section
-    
     def depositCollateral(self,
                           nft_id:int,
                           collateral_address:ChecksumAddress,
@@ -1283,8 +1260,9 @@ class AsyncFWXPerpCoreContract(AsyncFWXPerpCoreContractBase):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None=None) -> None:
-        super().__init__(rpc_detail, address)
+                 address:AddressLike=FWX_PERP_CORE_ADDRESS_BASE,
+                 abi:Any = FWX_PERP_CORE_ABI) -> None:
+        super().__init__(rpc_detail, address,abi)
         pass
     
     async def async_get_position(self,
@@ -1339,22 +1317,13 @@ class AsyncFWXPerpCoreContract(AsyncFWXPerpCoreContractBase):
                                                 transaction_index=base_event_data.transaction_index,
                                                 args=FWXPerpCoreClosePositionArgs(owener,nft_id,position_id,closing_size,closing_price,pnl,is_long,clooe_all_positions,pair_bytes,collateral_swap_amount_unlocked,router_address))
         
-class AsyncFWXPerpHelperContractBase(AsyncWeb3HTTP):
+class AsyncFWXPerpHelperContractBase(AsyncERC20ContractBase):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None=None) -> None:
-        super().__init__(rpc_detail)
-        if address is None:
-            if rpc_detail.chain_id == 8453:
-                address = FWX_PERP_HELPER_ADDRESS_BASE
-            else:
-                raise ValueError("address cannot be None")
-        else:
-            address = address
-            
-        self.address = Web3.to_checksum_address(address)
-        self.contract = self.load_contract(FWX_PERP_HELPER_ABI,self.address)
+                 address:AddressLike = FWX_PERP_HELPER_ADDRESS_BASE,
+                 abi:Any = FWX_PERP_HELPER_ABI,) -> None:
+        super().__init__(rpc_detail,address,abi)
         
     # Call function Section
     
@@ -1387,9 +1356,9 @@ class AsyncFWXPerpHelperContract(AsyncFWXPerpHelperContractBase):
     
     def __init__(self,
                  rpc_detail: RPCDetail,
-                 address:AddressLike|None=None) -> None:
-        super().__init__(rpc_detail, address)
-        pass
+                 address:AddressLike = FWX_PERP_HELPER_ADDRESS_BASE,
+                 abi:Any = FWX_PERP_HELPER_ABI,) -> None:
+        super().__init__(rpc_detail,address,abi)
     
     async def async_get_max_contract_size(self,
                                           perps_core_address:ChecksumAddress,

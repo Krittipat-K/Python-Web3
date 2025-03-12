@@ -17,7 +17,7 @@ from eth_typing import (
 )
 from web3.contract.async_contract import (
     AsyncContract,
-    AsyncContractEvent
+    AsyncContractEvent,
 )
 from web3.types import (
     EventData,
@@ -124,9 +124,9 @@ class AsyncWeb3HTTP:
         return self.w3.eth.contract(abi=abi,address=address)
     
     def process_receipt(self,
-                                    receipt:TxReceipt,
-                                    event:AsyncContractEvent,
-                                    error:EventLogErrorFlags=EventLogErrorFlags.Discard)->tuple[EventData]:
+                        receipt:TxReceipt,
+                        event:AsyncContractEvent,
+                        error:EventLogErrorFlags=EventLogErrorFlags.Discard)->tuple[EventData]:
         
         return event.process_receipt(receipt,errors=error)
     
