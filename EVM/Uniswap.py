@@ -210,8 +210,8 @@ class AsyncUniswapV3SDK(AsyncWeb3HTTP):
                                                             0)
                 
         else: #Sell Case
-            token_in = self.pool.collateral.address
-            token_out = self.pool.underlying.address
+            token_in = self.pool.underlying.address
+            token_out = self.pool.collateral.address
             
             quoter_respond = await self.quoter.async_quote_exact_output_single_with_pool(token_in,
                                                                             token_out,
@@ -271,8 +271,8 @@ class AsyncUniswapV3SDK(AsyncWeb3HTTP):
             recipient = wallet.wallet_address
         volumn_in_wei = int(Web3.to_wei(abs(trading_order),self.pool.underlying.unit_type))
         if trading_order >0: #Buy Case
-            token_in = self.pool.underlying.address
-            token_out = self.pool.collateral.address
+            token_in = self.pool.collateral.address
+            token_out = self.pool.underlying.address
             
             quoter_respond = await self.quoter.async_quote_exact_output_single_with_pool(token_in,
                                                                             token_out,
